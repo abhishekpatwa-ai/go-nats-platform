@@ -1,0 +1,6 @@
+apiVersion: v2
+name: app
+description: Orders demo — Go API, Go worker, TypeScript web, PostgreSQL (StatefulSet)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,91 @@
+# Build, scan and deploy all three apps to EKS.
+#   build  (matrix: api, worker, web) -> OIDC login -> docker build -> Trivy scan -> push to ECR
+#   deploy -> helm upgrade into the "app" namespace (the GitHub role may touch only that namespace)
+name: build-and-deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/**", "helm/**", ".github/workflows/**"] # Terraform changes don't trigger a deploy
+  workflow_dispatch: # "Run workflow" button
+
+permissions:
+  id-token: write # needed for OIDC (no AWS keys stored anywhere)
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  CLUSTER: go-nats
+  ROLE_ARN: arn:aws:iam::448270596538:role/go-nats-github-deploy
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false # never cancel a deploy halfway
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [api, worker, web] # three images built in parallel
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        run: |
+          IMAGE=${{ steps.ecr.outputs.registry }}/go-nats/${{ matrix.app }}:${{ github.sha }}
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          docker build -t "$IMAGE" apps/${{ matrix.app }}
+
+      - name: Security gate (fail on fixable CRITICAL vulnerabilities)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Push to ECR
+        run: docker push "$IMAGE"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: dev # add required reviewers here to get an approval step
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Connect kubectl to EKS
+        run: aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+
+      - uses: azure/setup-helm@v4
+
+      - name: Helm upgrade (rolling update, waits until healthy)
+        run: |
+          helm upgrade --install app helm/app \
+            --namespace app \
+            --set registry=${{ steps.ecr.outputs.registry }} \
+            --set imageTag=${{ github.sha }} \
+            --wait --timeout 10m
+
+      - name: Show what's running
+        run: |
+          kubectl get pods,svc,ingress -n app
+          echo "### Deployed ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          kubectl get ingress app -n app -o jsonpath='URL: http://{.status.loadBalancer.ingress[0].hostname}' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,10 @@
+# Terraform working files and local state (never commit state)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Build output
+node_modules/
+dist/

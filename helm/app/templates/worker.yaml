@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels: { app: worker }
+  template:
+    metadata:
+      labels: { app: worker }
+    spec:
+      securityContext: { runAsNonRoot: true }
+      terminationGracePeriodSeconds: 30 # time to finish in-flight messages after SIGTERM
+      containers:
+        - name: worker
+          image: "{{ .Values.registry }}/go-nats/worker:{{ .Values.imageTag }}"
+          ports:
+            - { name: metrics, containerPort: 8081 }
+          env:
+            - { name: NATS_URL, value: {{ .Values.natsUrl | quote }} }
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: postgres, key: database-url } }
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 128Mi }
+---
+# Service only so Prometheus can find the worker's /metrics (no traffic comes in)
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  labels: { app: worker, metrics: "true" }
+spec:
+  selector: { app: worker }
+  ports:
+    - { name: metrics, port: 8081, targetPort: metrics }

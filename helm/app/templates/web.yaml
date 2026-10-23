@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels: { app: web }
+  strategy:
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      securityContext: { runAsNonRoot: true }
+      containers:
+        - name: web
+          image: "{{ .Values.registry }}/go-nats/web:{{ .Values.imageTag }}"
+          ports:
+            - { name: http, containerPort: 8080 }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 20m, memory: 16Mi }
+            limits: { memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+spec:
+  selector: { app: web }
+  ports:
+    - { name: http, port: 80, targetPort: http }

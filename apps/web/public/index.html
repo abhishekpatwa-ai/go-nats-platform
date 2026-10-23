@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orders demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+      form { display: flex; gap: 8px; margin-bottom: 12px; }
+      input, button { padding: 8px; font-size: 16px; }
+      li { padding: 4px 0; }
+      #status { color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>Orders</h1>
+    <p>TypeScript frontend → Go API → NATS JetStream → Go worker → PostgreSQL</p>
+    <form id="order-form">
+      <input name="item" placeholder="Item" required />
+      <input name="quantity" type="number" min="1" value="1" required />
+      <button type="submit">Place order</button>
+    </form>
+    <p id="status"></p>
+    <ul id="orders"></ul>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

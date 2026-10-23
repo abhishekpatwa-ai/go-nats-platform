@@ -1,0 +1,24 @@
+# Set by the pipeline: --set registry=<account>.dkr.ecr.eu-west-1.amazonaws.com --set imageTag=<commit SHA>
+registry: ""
+imageTag: latest
+
+api:
+  replicas: 2
+worker:
+  replicas: 1
+web:
+  replicas: 2
+
+# NATS is installed by Terraform in the "nats" namespace
+natsUrl: nats://nats.nats.svc.cluster.local:4222
+
+postgres:
+  image: postgres:16-alpine
+  database: orders
+  user: app
+  storage: 2Gi # EBS gp3 via the default StorageClass
+  # No password here: the chart generates one once and keeps it in a Secret.
+  # In production I'd use RDS with the password in Secrets Manager (External Secrets Operator).
+
+monitoring:
+  enabled: true # ServiceMonitors so Prometheus scrapes /metrics

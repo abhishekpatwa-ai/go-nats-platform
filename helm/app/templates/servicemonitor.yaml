@@ -1,0 +1,17 @@
+{{- if .Values.monitoring.enabled }}
+# Tells Prometheus (kube-prometheus-stack) to scrape /metrics from every Service labelled metrics=true
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: app
+spec:
+  selector:
+    matchLabels: { metrics: "true" }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+    - port: metrics
+      path: /metrics
+      interval: 15s
+{{- end }}

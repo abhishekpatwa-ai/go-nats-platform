@@ -1,0 +1,68 @@
+{{- /*
+  Password: generated once, then reused on every upgrade (lookup reads the existing Secret),
+  so it is never stored in Git.
+*/ -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace "postgres" -}}
+{{- $password := randAlphaNum 24 -}}
+{{- if $existing }}{{- $password = index $existing.data "password" | b64dec -}}{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres
+type: Opaque
+stringData:
+  password: {{ $password | quote }}
+  database-url: "postgres://{{ .Values.postgres.user }}:{{ $password }}@postgres:5432/{{ .Values.postgres.database }}?sslmode=disable"
+---
+# Headless Service: gives the StatefulSet pod a stable DNS name (postgres-0.postgres)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  clusterIP: None
+  selector: { app: postgres }
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - containerPort: 5432
+          env:
+            - { name: POSTGRES_DB, value: {{ .Values.postgres.database | quote }} }
+            - { name: POSTGRES_USER, value: {{ .Values.postgres.user | quote }} }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: postgres, key: password } }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", {{ .Values.postgres.user | quote }}] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+  # Each pod gets its own PVC -> its own EBS disk, which survives pod restarts
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}
