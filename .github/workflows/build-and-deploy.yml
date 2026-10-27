@@ -45,13 +45,13 @@ jobs:
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
           docker build -t "$IMAGE" apps/${{ matrix.app }}
 
+      # Trivy runs from its official image (pinned), scanning the image we just built
       - name: Security gate (fail on fixable CRITICAL vulnerabilities)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: ${{ env.IMAGE }}
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.56.2 image \
+            --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress \
+            "$IMAGE"
 
       - name: Push to ECR
         run: docker push "$IMAGE"
