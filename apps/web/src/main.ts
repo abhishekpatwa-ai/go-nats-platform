@@ -10,12 +10,12 @@ interface Order {
 
 const form = document.querySelector<HTMLFormElement>("#order-form")!;
 const list = document.querySelector<HTMLUListElement>("#orders")!;
-const status = document.querySelector<HTMLParagraphElement>("#status")!;
+const statusLine = document.querySelector<HTMLParagraphElement>("#status")!;
 
 async function loadOrders(): Promise<void> {
   const res = await fetch("/api/orders");
   if (!res.ok) {
-    status.textContent = `Could not load orders (${res.status})`;
+    statusLine.textContent = `Could not load orders (${res.status})`;
     return;
   }
   const orders: Order[] = await res.json();
@@ -39,7 +39,7 @@ form.addEventListener("submit", async (event: SubmitEvent) => {
     body: JSON.stringify(body),
   });
 
-  status.textContent = res.ok
+  statusLine.textContent = res.ok
     ? "Queued in NATS — the worker will save it in a moment"
     : `Error ${res.status}`;
   form.reset();
@@ -48,3 +48,6 @@ form.addEventListener("submit", async (event: SubmitEvent) => {
 
 loadOrders();
 setInterval(loadOrders, 5000);
+
+// Makes this file a module, so its names never clash with browser globals like window.status
+export {};
