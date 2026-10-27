@@ -47,5 +47,8 @@ resource "helm_release" "monitoring" {
     grafana = { service = { type = "ClusterIP" } } # open with kubectl port-forward
   })]
 
-  depends_on = [module.eks]
+  # The LB Controller registers a webhook that checks every new Service. If this chart
+  # creates Services before the controller's pods are ready, the webhook has no endpoints
+  # and the install fails — so wait for the controller first.
+  depends_on = [module.eks, helm_release.aws_lbc]
 }
